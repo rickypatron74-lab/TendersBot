@@ -1,7 +1,8 @@
 import { sendText } from "../whatsapp/client";
 import type { InboundMessage } from "../whatsapp/types";
 import { formatMenuMessage } from "./menu";
-import { getSession, saveSession, resetSession } from "./session";
+import { getSession, saveSession, resetSession, type SessionContext } from "./session";
+import { withPhoneLock } from "./lock";
 import {
   getOrCreateCustomer,
   getOrCreateCartOrder,
@@ -14,7 +15,11 @@ import {
 import { notifyAdminsOfPaymentProof } from "../admin/commands";
 import { prisma } from "../db/client";
 
-export async function handleCustomerMessage(message: InboundMessage): Promise<void> {
+export function handleCustomerMessage(message: InboundMessage): Promise<void> {
+  return withPhoneLock(message.from, () => processCustomerMessage(message));
+}
+
+async function processCustomerMessage(message: InboundMessage): Promise<void> {
   const phone = message.from;
   const session = await getSession(phone);
   const customer = await getOrCreateCustomer(phone);
@@ -42,7 +47,13 @@ export async function handleCustomerMessage(message: InboundMessage): Promise<vo
   }
 }
 
-async function handleMenuState(phone: string, message: InboundMessage, context: any) {
+/** Si el pedido en curso se perdió (contexto corrupto o sesión inconsistente), reinicia en vez de tronar. */
+async function recoverFromMissingOrder(phone: string): Promise<void> {
+  await sendText(phone, "Se me perdió tu pedido en curso, empecemos de nuevo 🙏");
+  await saveSession(phone, "menu", {});
+}
+
+async function handleMenuState(phone: string, message: InboundMessage, context: SessionContext) {
   if (!context.orderId) {
     const customer = await getOrCreateCustomer(phone);
     const order = await getOrCreateCartOrder(customer.id);
@@ -66,12 +77,20 @@ async function handleMenuState(phone: string, message: InboundMessage, context: 
     return;
   }
 
-  await addItemToOrder(context.orderId, menuItemId, 1);
+  try {
+    await addItemToOrder(context.orderId, menuItemId, 1);
+  } catch {
+    await sendText(phone, `Uy, ese ítem ya no está disponible. Menú actualizado:\n\n${text}`);
+    await saveSession(phone, "menu", context);
+    return;
+  }
   await sendText(phone, "Agregado ✅. ¿Quieres algo más? Responde con otro número, o escribe *LISTO* para continuar.");
   await saveSession(phone, "collecting", context);
 }
 
-async function handleCollectingState(phone: string, message: InboundMessage, context: any) {
+async function handleCollectingState(phone: string, message: InboundMessage, context: SessionContext) {
+  if (!context.orderId) return recoverFromMissingOrder(phone);
+
   const text = message.text?.trim() ?? "";
 
   if (text.toUpperCase() === "LISTO") {
@@ -87,12 +106,22 @@ async function handleCollectingState(phone: string, message: InboundMessage, con
     return;
   }
 
-  await addItemToOrder(context.orderId, menuItemId, 1);
+  try {
+    await addItemToOrder(context.orderId, menuItemId, 1);
+  } catch {
+    const { text: menuText, indexToId } = await formatMenuMessage();
+    context.indexToId = indexToId;
+    await sendText(phone, `Uy, ese ítem ya no está disponible. Menú actualizado:\n\n${menuText}`);
+    await saveSession(phone, "collecting", context);
+    return;
+  }
   await sendText(phone, "Agregado ✅. ¿Algo más? Número de ítem, o *LISTO*.");
   await saveSession(phone, "collecting", context);
 }
 
-async function handleAddressState(phone: string, message: InboundMessage, context: any) {
+async function handleAddressState(phone: string, message: InboundMessage, context: SessionContext) {
+  if (!context.orderId) return recoverFromMissingOrder(phone);
+
   const address = message.text?.trim();
   if (!address) {
     await sendText(phone, "Necesito la dirección de entrega en texto, por favor.");
@@ -111,7 +140,7 @@ async function handleAddressState(phone: string, message: InboundMessage, contex
   await goToConfirm(phone, context);
 }
 
-async function handleNameState(phone: string, message: InboundMessage, context: any, customerId: string) {
+async function handleNameState(phone: string, message: InboundMessage, context: SessionContext, customerId: string) {
   const name = message.text?.trim();
   if (!name) {
     await sendText(phone, "¿A nombre de quién es el pedido?");
@@ -122,9 +151,11 @@ async function handleNameState(phone: string, message: InboundMessage, context: 
   await goToConfirm(phone, context);
 }
 
-async function goToConfirm(phone: string, context: any) {
+async function goToConfirm(phone: string, context: SessionContext) {
+  if (!context.orderId) return recoverFromMissingOrder(phone);
+
   const order = await getOrderWithDetails(context.orderId);
-  if (!order) return;
+  if (!order) return recoverFromMissingOrder(phone);
 
   const summary = formatOrderSummary(order as any);
   const qr = process.env.PAYMENT_QR_IMAGE_URL;
@@ -137,7 +168,9 @@ async function goToConfirm(phone: string, context: any) {
   await saveSession(phone, "confirm", context);
 }
 
-async function handleConfirmState(phone: string, message: InboundMessage, context: any) {
+async function handleConfirmState(phone: string, message: InboundMessage, context: SessionContext) {
+  if (!context.orderId) return recoverFromMissingOrder(phone);
+
   if (message.type !== "image" || !message.mediaId) {
     await sendText(phone, "Cuando hagas el pago, envíame la foto o captura del comprobante para confirmar tu pedido.");
     return;

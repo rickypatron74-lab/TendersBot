@@ -62,3 +62,8 @@ model ConversationSession {
   context   Json
   updatedAt DateTime @updatedAt
 }
+
+model ProcessedMessage {
+  waMessageId String   @id
+  processedAt DateTime @default(now())
+}

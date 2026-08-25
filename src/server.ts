@@ -1,8 +1,15 @@
 import "dotenv/config";
 import express from "express";
 import { extractInboundMessages } from "./whatsapp/types";
+import { markProcessedOnce } from "./whatsapp/dedup";
 import { handleCustomerMessage } from "./conversation/stateMachine";
 import { isAdminPhone, handleAdminMessage } from "./admin/commands";
+
+if (!process.env.WHATSAPP_TOKEN) {
+  console.warn(
+    "⚠️  WHATSAPP_TOKEN no está configurado: el bot está en modo simulación, los mensajes solo se imprimen en consola y NO se envían por WhatsApp de verdad."
+  );
+}
 
 const app = express();
 app.use(express.json());
@@ -25,6 +32,10 @@ app.post("/webhook", async (req, res) => {
   try {
     const messages = extractInboundMessages(req.body);
     for (const message of messages) {
+      if (message.id && !(await markProcessedOnce(message.id))) {
+        continue; // WhatsApp reenvió un mensaje que ya procesamos
+      }
+
       if (isAdminPhone(message.from)) {
         await handleAdminMessage(message);
       } else {

@@ -43,12 +43,12 @@ export async function recalculateTotal(orderId: string) {
 }
 
 export async function setDeliveryDetails(orderId: string, address: string) {
-  await prisma.order.update({
+  const order = await prisma.order.update({
     where: { id: orderId },
     data: { status: "pendiente_pago" },
   });
   await prisma.customer.update({
-    where: { id: (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).customerId },
+    where: { id: order.customerId },
     data: { address },
   });
 }

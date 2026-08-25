@@ -75,3 +75,9 @@ model ConversationSession {
   context   Json     @default("{}")
   updatedAt DateTime @updatedAt
 }
+
+// Dedup de webhooks: WhatsApp puede reentregar el mismo mensaje más de una vez.
+model ProcessedMessage {
+  waMessageId String   @id
+  processedAt DateTime @default(now())
+}
