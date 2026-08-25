@@ -46,8 +46,24 @@ export async function handleAdminMessage(message: InboundMessage): Promise<void>
     return;
   }
 
+  const STATUS_LABEL: Record<string, string> = {
+    carrito: "en carrito",
+    pendiente_pago: "pendiente de pago",
+    pago_por_verificar: "esperando verificación",
+    pagado: "pagado",
+    en_cocina: "en cocina",
+    en_camino: "en camino",
+    entregado: "entregado",
+    cancelado: "cancelado",
+  };
+
   switch (command.toUpperCase()) {
     case "CONFIRMAR": {
+      if (order.status !== "pago_por_verificar") {
+        await sendText(message.from, `Pedido ${shortId} ya está ${STATUS_LABEL[order.status] ?? order.status}, no hay nada pendiente de confirmar.`);
+        break;
+      }
+
       await confirmPayment(order.id);
       const fullOrder = await getOrderWithDetails(order.id);
       if (fullOrder) {
@@ -64,6 +80,11 @@ export async function handleAdminMessage(message: InboundMessage): Promise<void>
       break;
     }
     case "LISTO": {
+      if (order.status !== "en_cocina") {
+        await sendText(message.from, `Pedido ${shortId} ya está ${STATUS_LABEL[order.status] ?? order.status}, no está en cocina esperando salir.`);
+        break;
+      }
+
       await updateOrderStatus(order.id, "en_camino");
       const fullOrder = await getOrderWithDetails(order.id);
       if (fullOrder) {
@@ -73,6 +94,11 @@ export async function handleAdminMessage(message: InboundMessage): Promise<void>
       break;
     }
     case "ENTREGADO": {
+      if (order.status !== "en_camino") {
+        await sendText(message.from, `Pedido ${shortId} ya está ${STATUS_LABEL[order.status] ?? order.status}, no está en camino todavía.`);
+        break;
+      }
+
       await updateOrderStatus(order.id, "entregado");
       const fullOrder = await getOrderWithDetails(order.id);
       if (fullOrder) {
