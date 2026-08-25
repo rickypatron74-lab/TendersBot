@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  orders    Order[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  priceCents  Int
+  category    String
+  active      Boolean  @default(true)
+
+  orderItems  OrderItem[]
+}
+
+enum OrderStatus {
+  carrito
+  pendiente_pago
+  pago_por_verificar
+  pagado
+  en_cocina
+  en_camino
+  entregado
+  cancelado
+}
+
+enum PaymentMethod {
+  qr
+  transferencia
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  customerId         String
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  status             OrderStatus   @default(carrito)
+  totalCents         Int           @default(0)
+  paymentMethod      PaymentMethod?
+  paymentProofMediaId String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  items              OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int
+  unitPriceCents Int
+  notes      String?
+}
+
+model ConversationSession {
+  phone     String   @id
+  state     String
+  context   Json     @default("{}")
+  updatedAt DateTime @updatedAt
+}
