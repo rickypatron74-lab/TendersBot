@@ -1,5 +1,10 @@
 const GRAPH_API_VERSION = "v21.0";
 
+// Sin token real (dev local, simulaciones) los mensajes se imprimen en consola en vez de llamar a Meta.
+function isDryRun(): boolean {
+  return !process.env.WHATSAPP_TOKEN;
+}
+
 function apiUrl(path: string): string {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   return `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/${path}`;
@@ -22,6 +27,10 @@ async function callGraphApi(body: unknown): Promise<void> {
 }
 
 export async function sendText(to: string, text: string): Promise<void> {
+  if (isDryRun()) {
+    console.log(`\n[WhatsApp -> ${to}]\n${text}\n`);
+    return;
+  }
   await callGraphApi({
     messaging_product: "whatsapp",
     to,
@@ -31,6 +40,10 @@ export async function sendText(to: string, text: string): Promise<void> {
 }
 
 export async function sendImageByUrl(to: string, imageUrl: string, caption?: string): Promise<void> {
+  if (isDryRun()) {
+    console.log(`\n[WhatsApp -> ${to}] (imagen: ${imageUrl})\n${caption ?? ""}\n`);
+    return;
+  }
   await callGraphApi({
     messaging_product: "whatsapp",
     to,
@@ -40,6 +53,10 @@ export async function sendImageByUrl(to: string, imageUrl: string, caption?: str
 }
 
 export async function forwardImageById(to: string, mediaId: string, caption?: string): Promise<void> {
+  if (isDryRun()) {
+    console.log(`\n[WhatsApp -> ${to}] (reenvía imagen ${mediaId})\n${caption ?? ""}\n`);
+    return;
+  }
   await callGraphApi({
     messaging_product: "whatsapp",
     to,
@@ -49,6 +66,7 @@ export async function forwardImageById(to: string, mediaId: string, caption?: st
 }
 
 export async function getMediaUrl(mediaId: string): Promise<string> {
+  if (isDryRun()) return `https://simulado.local/media/${mediaId}`;
   const res = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`, {
     headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
   });

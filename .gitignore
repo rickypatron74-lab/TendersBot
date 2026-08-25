@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.log
+prisma/sim.db
+prisma/sim.db-journal

@@ -1,0 +1,64 @@
+// Esquema temporal SOLO para simular la conversación en local con SQLite.
+// El esquema real de producción es prisma/schema.prisma (PostgreSQL). No se commitea.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  orders    Order[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  priceCents  Int
+  category    String
+  active      Boolean  @default(true)
+
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id                 String   @id @default(cuid())
+  customerId         String
+  customer           Customer @relation(fields: [customerId], references: [id])
+  status             String   @default("carrito")
+  totalCents         Int      @default(0)
+  paymentMethod      String?
+  paymentProofMediaId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  items              OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int
+  unitPriceCents Int
+  notes      String?
+}
+
+model ConversationSession {
+  phone     String   @id
+  state     String
+  context   Json
+  updatedAt DateTime @updatedAt
+}

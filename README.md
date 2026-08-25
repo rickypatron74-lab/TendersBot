@@ -55,6 +55,24 @@ En el panel de Meta, en "Configuration" del producto WhatsApp, registra:
 
 Comandos de admin adicionales: `LISTO <ID>` (en camino), `ENTREGADO <ID>` (entregado).
 
+## 5.1 Probar la conversación sin credenciales de WhatsApp ni Postgres
+
+Para ver el bot funcionando localmente sin tener aún el token de Meta ni una base de datos Postgres, hay un esquema y un script de simulación que usan SQLite y solo imprimen los mensajes en consola en vez de llamarlos por WhatsApp:
+
+```bash
+DATABASE_URL="file:./sim.db" npx prisma db push --schema=prisma/schema.sim.prisma --skip-generate --accept-data-loss
+DATABASE_URL="file:./sim.db" npx tsx prisma/seed.ts
+DATABASE_URL="file:./sim.db" ADMIN_PHONE_NUMBERS="573000000000" KITCHEN_PHONE_NUMBER="573000000001" npx tsx prisma/simulate.ts
+```
+
+Esto corre el flujo real (menú → pedido → pago → confirmación admin → comanda) contra la misma lógica de negocio, sin depender de Meta. Después de probar, regenera el cliente de Postgres para volver a desarrollo/producción normal:
+
+```bash
+npx prisma generate
+```
+
+(`prisma/schema.sim.prisma` y `prisma/simulate.ts` son solo para pruebas locales, no se usan en producción.)
+
 ## 6. Desplegar (Railway recomendado)
 
 1. Crea un proyecto en Railway, agrega un servicio Postgres.
